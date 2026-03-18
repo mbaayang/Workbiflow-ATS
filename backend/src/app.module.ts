@@ -19,7 +19,7 @@ import { ApplicationsModule } from './applications/applications.module';
     }),
     TypeOrmModule.forRoot(ORMConfig),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '../../'),
+      rootPath: join(process.cwd(), 'public', 'uploads'),
       serveRoot: '/uploads',
     }),
     JobsModule,

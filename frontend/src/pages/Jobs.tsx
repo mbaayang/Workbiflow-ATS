@@ -35,6 +35,7 @@ const statusBadge: Record<JobStatus, string> = {
 
 export default function Jobs() {
 	const [jobs, setJobs] = useState<JobItem[]>([])
+	const [applicationCounts, setApplicationCounts] = useState<Record<number, number>>({})
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState('')
 	const [message, setMessage] = useState('')
@@ -46,9 +47,27 @@ export default function Jobs() {
 		setLoading(true)
 		setError('')
 		try {
-			const response = await axios.get('/api/jobs')
-			const payload = response?.data?.data ?? response?.data ?? []
-			setJobs(Array.isArray(payload) ? payload : [])
+			const [jobsResponse, applicationsResponse] = await Promise.all([
+				axios.get('/api/jobs'),
+				axios.get('/api/applications'),
+			])
+			const jobsPayload = jobsResponse?.data?.data ?? jobsResponse?.data ?? []
+			const applicationsPayload = applicationsResponse?.data?.data ?? applicationsResponse?.data ?? []
+
+			const jobsList = Array.isArray(jobsPayload) ? jobsPayload : []
+			setJobs(jobsList)
+
+			const counts = (Array.isArray(applicationsPayload) ? applicationsPayload : []).reduce(
+				(acc: Record<number, number>, application: { jobId?: number }) => {
+					const jobId = Number(application.jobId)
+					if (!Number.isNaN(jobId)) {
+						acc[jobId] = (acc[jobId] ?? 0) + 1
+					}
+					return acc
+				},
+				{},
+			)
+			setApplicationCounts(counts)
 		} catch {
 			setError('Impossible de charger les offres pour le moment.')
 		} finally {
@@ -195,10 +214,19 @@ export default function Jobs() {
 												<span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
 													Début: {job.desiredStartDate}
 												</span>
+												<span className="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700">
+													{applicationCounts[job.id] ?? 0} candidature(s)
+												</span>
 											</div>
 										</div>
 
 										<div className="flex flex-wrap gap-2 md:justify-end">
+											<Link
+												to={`/jobs/${job.id}/pipeline`}
+												className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
+											>
+												Pipeline
+											</Link>
 											<button
 												type="button"
 												onClick={() =>
@@ -241,6 +269,10 @@ export default function Jobs() {
 											<p>
 												<span className="font-medium text-slate-900">Créée le:</span>{' '}
 												{job.createdAt ? new Date(job.createdAt).toLocaleDateString() : '-'}
+											</p>
+											<p>
+												<span className="font-medium text-slate-900">Candidatures:</span>{' '}
+												{applicationCounts[job.id] ?? 0}
 											</p>
 											<p className="md:col-span-2 break-all">
 												<span className="font-medium text-slate-900">URL publique:</span>{' '}

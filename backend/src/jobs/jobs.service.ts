@@ -147,7 +147,7 @@ export class JobsService {
   private resolveCompanySlug(companySlug?: string, fallback?: string) {
     const defaultCompanySlug = this.configService.get<string>(
       'DEFAULT_COMPANY_SLUG',
-      'workbiflow',
+      'peak-performance',
     );
 
     return this.normalizeSlug(companySlug || fallback || defaultCompanySlug);
@@ -160,7 +160,7 @@ export class JobsService {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    return normalizedValue || 'workbiflow';
+    return normalizedValue || 'peak-performance';
   }
 
   private validateSalaryRange(salaryMin?: number, salaryMax?: number) {

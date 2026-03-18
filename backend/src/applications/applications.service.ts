@@ -1,43 +1,38 @@
-import { Injectable, BadRequestException } from '@nestjs/common'
+import { Injectable, BadRequestException, Logger } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
-import * as fs from 'fs'
 import * as path from 'path'
+import * as fs from 'fs'
+import { UploadService } from '../@common/upload/upload.service'
+import { MailService } from '../@common/mail/mail.service'
 import { Application } from './entities/application.entity'
 import { CreateApplicationDto } from './dto/create-application.dto'
 import { UpdateApplicationDto } from './dto/update-application.dto'
 
 @Injectable()
 export class ApplicationsService {
-	private readonly uploadsDir = path.join(process.cwd(), 'uploads')
+	private readonly logger = new Logger(ApplicationsService.name)
+	private readonly publicDir = path.join(process.cwd(), 'public')
 
 	constructor(
 		@InjectRepository(Application)
 		private readonly applicationRepository: Repository<Application>,
-	) {
-		this.ensureUploadsDir()
-	}
+		private readonly uploadService: UploadService,
+		private readonly mailService: MailService,
+	) {}
 
-	private ensureUploadsDir() {
-		if (!fs.existsSync(this.uploadsDir)) {
-			fs.mkdirSync(this.uploadsDir, { recursive: true })
+	private getApplicationStorageDestination(subfolder: 'cv' | 'cover-letters') {
+		return () => {
+			const targetDir = path.join(this.publicDir, 'uploads', 'applications', subfolder)
+			if (!fs.existsSync(targetDir)) {
+				fs.mkdirSync(targetDir, { recursive: true })
+			}
+			return targetDir
 		}
 	}
 
-	private saveFile(file: Express.Multer.File | undefined, subfolder: string): string | null {
-		if (!file) return null
-
-		const subfolder_path = path.join(this.uploadsDir, subfolder)
-		if (!fs.existsSync(subfolder_path)) {
-			fs.mkdirSync(subfolder_path, { recursive: true })
-		}
-
-		const timestamp = Date.now()
-		const filename = `${timestamp}-${file.originalname}`
-		const filepath = path.join(subfolder_path, filename)
-
-		fs.writeFileSync(filepath, file.buffer)
-		return path.join(subfolder, filename)
+	private buildRelativeUploadPath(subfolder: 'cv' | 'cover-letters', filename: string) {
+		return path.join('uploads', 'applications', subfolder, filename).replace(/\\/g, '/')
 	}
 
 	async create(createApplicationDto: CreateApplicationDto) {
@@ -45,8 +40,26 @@ export class ApplicationsService {
 			throw new BadRequestException('jobId et companySlug sont requis')
 		}
 
-		const cvPath = this.saveFile(createApplicationDto.cv, 'cv')
-		const coverLetterPath = this.saveFile(createApplicationDto.coverLetter, 'cover-letters')
+		const cvUpload = createApplicationDto.cv
+			? await this.uploadService.uploadSingleFile(createApplicationDto.cv, {
+				allowedFileTypes: ['.pdf', '.doc', '.docx'],
+				storageDestination: this.getApplicationStorageDestination('cv'),
+			})
+			: null
+
+		const coverLetterUpload = createApplicationDto.coverLetter
+			? await this.uploadService.uploadSingleFile(createApplicationDto.coverLetter, {
+				allowedFileTypes: ['.pdf', '.doc', '.docx', '.txt'],
+				storageDestination: this.getApplicationStorageDestination('cover-letters'),
+			})
+			: null
+
+		const cvPath = cvUpload
+			? this.buildRelativeUploadPath('cv', cvUpload.filename)
+			: undefined
+		const coverLetterPath = coverLetterUpload
+			? this.buildRelativeUploadPath('cover-letters', coverLetterUpload.filename)
+			: undefined
 		const consentAccepted =
 			createApplicationDto.consentAccepted === true ||
 			String(createApplicationDto.consentAccepted).toLowerCase() === 'true'
@@ -60,15 +73,32 @@ export class ApplicationsService {
 			phone: createApplicationDto.phone,
 			city: createApplicationDto.city,
 			consentAccepted,
-			cvPath: cvPath ?? undefined,
-			coverLetterPath: coverLetterPath ?? undefined,
+			cvPath,
+			coverLetterPath,
 			prescreenAnswers: createApplicationDto.prescreenAnswers || [],
 			status: 'pending',
 		}
 
 		const application = this.applicationRepository.create(applicationData)
+		const savedApplication = await this.applicationRepository.save(application)
 
-		return await this.applicationRepository.save(application)
+		try {
+			const { subject, body } = this.mailService.applicationSubmitted(savedApplication.firstName)
+			await this.mailService.sendMail({
+				to: savedApplication.email,
+				subject,
+				body,
+				isHtml: true,
+			})
+		} catch (error) {
+			this.logger.warn(
+				`Candidature ${savedApplication.id} créée, mais email de confirmation non envoyé: ${
+					error instanceof Error ? error.message : 'unknown error'
+				}`,
+			)
+		}
+
+		return savedApplication
 	}
 
 	async findAll(filters?: { jobId?: number; companySlug?: string; status?: string }) {
@@ -114,14 +144,14 @@ export class ApplicationsService {
 
 		// Delete files if they exist
 		if (application.cvPath) {
-			const cvFilePath = path.join(this.uploadsDir, application.cvPath)
+			const cvFilePath = path.join(this.publicDir, application.cvPath)
 			if (fs.existsSync(cvFilePath)) {
 				fs.unlinkSync(cvFilePath)
 			}
 		}
 
 		if (application.coverLetterPath) {
-			const coverLetterFilePath = path.join(this.uploadsDir, application.coverLetterPath)
+			const coverLetterFilePath = path.join(this.publicDir, application.coverLetterPath)
 			if (fs.existsSync(coverLetterFilePath)) {
 				fs.unlinkSync(coverLetterFilePath)
 			}

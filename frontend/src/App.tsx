@@ -2,7 +2,8 @@ import './App.css'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import JobForm from './components/JobForm'
 import Jobs from './pages/Jobs'
-import Candidates from './pages/Candidates'
+import Application from './pages/Application'
+import Pipeline from './pages/Pipeline'
 
 function App() {
   return (
@@ -10,7 +11,9 @@ function App() {
       <Route path="/" element={<Navigate to="/jobs" replace />} />
       <Route path="/jobs" element={<Jobs />} />
       <Route path="/jobs/new" element={<JobForm />} />
-      <Route path="/jobs/:companySlug/:id" element={<Candidates />} />
+      <Route path="/pipeline" element={<Pipeline />} />
+      <Route path="/jobs/:jobId/pipeline" element={<Pipeline />} />
+      <Route path="/jobs/:companySlug/:id" element={<Application />} />
     </Routes>
   )
 }
