@@ -4,6 +4,7 @@ import { IsOptional, IsEnum } from 'class-validator'
 
 export class UpdateApplicationDto extends PartialType(CreateApplicationDto) {
 	@IsOptional()
-	@IsEnum(['pending', 'reviewing', 'accepted', 'rejected'])
-	status?: 'pending' | 'reviewing' | 'accepted' | 'rejected'
+	@IsEnum(['pending', 'reviewing', 'interview', 'test', 'accepted', 'rejected', 'offer'])
+	status?: 'pending' | 'reviewing' | 'interview' | 'test' | 'accepted' | 'rejected' | 'offer'
 }
+

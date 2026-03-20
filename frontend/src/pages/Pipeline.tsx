@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { Link, useParams } from 'react-router-dom'
 import KanbanBoard from '../components/KanbanBoard'
+import ApplicationDetail from '../components/ApplicationDetail'
 import type { KanbanStage } from '../components/KanbanBoard'
 import type { ApplicationItem } from '../types/ApplicationType'
 import type { JobItem } from '../types/JobType'
@@ -67,8 +68,21 @@ const stageIndexMap = pipelineStages.reduce<Record<string, number>>((acc, stage,
 const statusToStage: Record<ApplicationItem['status'], StageId> = {
 	pending: 'received',
 	reviewing: 'screening',
-	accepted: 'offer',
+	interview: 'interview',
+	test: 'test',
+	accepted: 'decision',
 	rejected: 'decision',
+	offer: 'offer',
+}
+
+type PersistedStageId = Exclude<StageId, 'decision'>
+
+const stageToStatusMap: Record<PersistedStageId, ApplicationItem['status']> = {
+	received: 'pending',
+	screening: 'reviewing',
+	interview: 'interview',
+	test: 'test',
+	offer: 'offer',
 }
 
 export default function Pipeline() {
@@ -77,6 +91,10 @@ export default function Pipeline() {
 	const [jobs, setJobs] = useState<JobItem[]>([])
 	const [applications, setApplications] = useState<ApplicationItem[]>([])
 	const [stageByApplicationId, setStageByApplicationId] = useState<Record<string, StageId>>({})
+	const [decisionStatusByApplicationId, setDecisionStatusByApplicationId] = useState<
+		Record<string, 'accepted' | 'rejected' | undefined>
+	>({})
+	const [selectedApplication, setSelectedApplication] = useState<ApplicationItem | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState('')
 	const [feedback, setFeedback] = useState('')
@@ -108,7 +126,17 @@ export default function Pipeline() {
 					return acc
 				}, {})
 
+				const initialDecisionMap = applicationsList.reduce<
+					Record<string, 'accepted' | 'rejected' | undefined>
+				>((acc, app) => {
+					if (app.status === 'accepted' || app.status === 'rejected') {
+						acc[app.id] = app.status
+					}
+					return acc
+				}, {})
+
 				setStageByApplicationId(initialStageMap)
+				setDecisionStatusByApplicationId(initialDecisionMap)
 			} catch {
 				setError('Impossible de charger le pipeline pour le moment.')
 			} finally {
@@ -153,7 +181,7 @@ export default function Pipeline() {
 		return buckets
 	}, [filteredApplications, stageByApplicationId])
 
-	const moveCardToStage = (applicationId: string, toStageId: string) => {
+	const moveCardToStage = async (applicationId: string, toStageId: string) => {
 		const currentStageId = stageByApplicationId[applicationId] ?? 'received'
 		if (currentStageId === toStageId) {
 			return
@@ -167,15 +195,92 @@ export default function Pipeline() {
 			return
 		}
 
+		if (toStageId === 'offer' && decisionStatusByApplicationId[applicationId] !== 'accepted') {
+			setFeedback('Pour passer à Offre, la candidature doit être marquée “Accepté” dans Décision.')
+			return
+		}
+
+		if (toStageId === 'decision') {
+			setStageByApplicationId((prev) => ({
+				...prev,
+				[applicationId]: 'decision',
+			}))
+			setFeedback('Étape Décision atteinte. Choisis “Accepté” ou “Refusé” pour notifier le candidat.')
+			return
+		}
+
+		const statusToPersist = stageToStatusMap[toStageId as PersistedStageId]
+		if (!statusToPersist) {
+			setFeedback('Étape inconnue, impossible de sauvegarder la candidature.')
+			return
+		}
+
 		setStageByApplicationId((prev) => ({
 			...prev,
 			[applicationId]: toStageId as StageId,
 		}))
 
+		setApplications((prev) =>
+			prev.map((application) =>
+				application.id === applicationId
+					? { ...application, status: statusToPersist }
+					: application,
+			),
+		)
+
+		try {
+			await axios.patch(`/api/applications/${applicationId}`, { status: statusToPersist })
+		} catch {
+			setStageByApplicationId((prev) => ({
+				...prev,
+				[applicationId]: currentStageId,
+			}))
+
+			const previousStatus =
+				currentStageId === 'decision'
+					? decisionStatusByApplicationId[applicationId] || 'accepted'
+					: stageToStatusMap[currentStageId as PersistedStageId]
+			setApplications((prev) =>
+				prev.map((application) =>
+					application.id === applicationId
+						? { ...application, status: previousStatus }
+						: application,
+				),
+			)
+
+			setFeedback('Échec de la mise à jour en base. Le déplacement a été annulé.')
+			return
+		}
+
 		const targetStage = pipelineStages.find((stage) => stage.id === toStageId)
 		setFeedback(
 			`Candidature déplacée vers « ${targetStage?.title} ». Template email déclenché: ${targetStage?.emailLabel}.`,
 		)
+	}
+
+	const handleDecisionSelection = async (
+		applicationId: string,
+		decision: 'accepted' | 'rejected',
+	) => {
+		setDecisionStatusByApplicationId((prev) => ({
+			...prev,
+			[applicationId]: decision,
+		}))
+
+		setApplications((prev) =>
+			prev.map((application) =>
+				application.id === applicationId ? { ...application, status: decision } : application,
+			),
+		)
+
+		try {
+			await axios.patch(`/api/applications/${applicationId}`, { status: decision })
+			setFeedback(
+				`Décision enregistrée: ${decision === 'accepted' ? 'Accepté' : 'Refusé'}. Email candidat envoyé.`,
+			)
+		} catch {
+			setFeedback('Échec de l’enregistrement de la décision. Réessaie.')
+		}
 	}
 
 	if (loading) {
@@ -215,7 +320,17 @@ export default function Pipeline() {
 					stages={pipelineStages}
 					groupedApplications={groupedApplications}
 					onMoveCard={moveCardToStage}
+					onOpenDetails={(application) => setSelectedApplication(application)}
+					onSelectDecision={handleDecisionSelection}
+					decisionStatusByApplicationId={decisionStatusByApplicationId}
 					activeJobTitle={selectedJob?.title}
+				/>
+
+				<ApplicationDetail
+					isOpen={Boolean(selectedApplication)}
+					application={selectedApplication}
+					jobTitle={selectedJob?.title}
+					onClose={() => setSelectedApplication(null)}
 				/>
 			</div>
 		</main>

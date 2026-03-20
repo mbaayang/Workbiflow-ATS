@@ -131,12 +131,64 @@ export class ApplicationsService {
 
 	async update(id: string, updateApplicationDto: UpdateApplicationDto) {
 		const application = await this.findOne(id)
+		const oldStatus = application.status
 
 		if (updateApplicationDto.status) {
 			application.status = updateApplicationDto.status
 		}
 
-		return await this.applicationRepository.save(application)
+		const updatedApplication = await this.applicationRepository.save(application)
+
+		// Trigger email if status changed
+		if (oldStatus !== updateApplicationDto.status) {
+			try {
+				await this.sendStatusTransitionEmail(updatedApplication)
+			} catch (error) {
+				this.logger.warn(
+					`Candidature ${updatedApplication.id} mise à jour, mais email de transition non envoyé: ${
+						error instanceof Error ? error.message : 'unknown error'
+					}`,
+				)
+			}
+		}
+
+		return updatedApplication
+	}
+
+	private async sendStatusTransitionEmail(application: Application) {
+		let emailData: { subject: string; body: string } | null = null
+
+		switch (application.status) {
+			case 'reviewing':
+				emailData = this.mailService.advancedToScreening(application.firstName)
+				break
+			case 'interview':
+				emailData = this.mailService.advancedToInterview(application.firstName)
+				break
+			case 'test':
+				emailData = this.mailService.advancedToTest(application.firstName)
+				break
+			case 'accepted':
+				emailData = this.mailService.decisionAccepted(application.firstName)
+				break
+			case 'rejected':
+				emailData = this.mailService.decisionRejected(application.firstName)
+				break
+			case 'offer':
+				emailData = this.mailService.advancedToOffer(application.firstName)
+				break
+		}
+
+		if (!emailData) {
+			return
+		}
+
+		await this.mailService.sendMail({
+			to: application.email,
+			subject: emailData.subject,
+			body: emailData.body,
+			isHtml: true,
+		})
 	}
 
 	async remove(id: string) {

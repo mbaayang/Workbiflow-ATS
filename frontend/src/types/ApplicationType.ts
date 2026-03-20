@@ -1,4 +1,11 @@
-export type ApplicationStatus = 'pending' | 'reviewing' | 'accepted' | 'rejected'
+export type ApplicationStatus =
+	| 'pending'
+	| 'reviewing'
+	| 'interview'
+	| 'test'
+	| 'accepted'
+	| 'rejected'
+	| 'offer'
 
 export interface PrescreenAnswer {
 	label: string

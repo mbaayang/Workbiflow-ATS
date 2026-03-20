@@ -12,6 +12,9 @@ interface KanbanBoardProps {
 	stages: KanbanStage[]
 	groupedApplications: Record<string, ApplicationItem[]>
 	onMoveCard: (applicationId: string, toStageId: string) => void
+	onOpenDetails: (application: ApplicationItem) => void
+	onSelectDecision: (applicationId: string, decision: 'accepted' | 'rejected') => void
+	decisionStatusByApplicationId: Record<string, 'accepted' | 'rejected' | undefined>
 	activeJobTitle?: string
 }
 
@@ -19,6 +22,9 @@ export default function KanbanBoard({
 	stages,
 	groupedApplications,
 	onMoveCard,
+	onOpenDetails,
+	onSelectDecision,
+	decisionStatusByApplicationId,
 	activeJobTitle,
 }: KanbanBoardProps) {
 	const getInitials = (firstName: string, lastName: string) => {
@@ -120,6 +126,49 @@ export default function KanbanBoard({
 													>
 														Voir CV
 													</a>
+												)}
+												<button
+													type="button"
+													onClick={(event) => {
+														event.stopPropagation()
+														onOpenDetails(application)
+													}}
+													className="inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+												>
+													Voir détail
+												</button>
+
+												{stage.id === 'decision' && (
+													<div className="mt-2 flex flex-wrap gap-2">
+														<button
+															type="button"
+															onClick={(event) => {
+																event.stopPropagation()
+																onSelectDecision(application.id, 'accepted')
+															}}
+															className={`rounded-md px-2 py-1 text-xs font-medium ${
+																decisionStatusByApplicationId[application.id] === 'accepted'
+																	? 'bg-emerald-600 text-white'
+																	: 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+															}`}
+														>
+															Accepté
+														</button>
+														<button
+															type="button"
+															onClick={(event) => {
+																event.stopPropagation()
+																onSelectDecision(application.id, 'rejected')
+															}}
+															className={`rounded-md px-2 py-1 text-xs font-medium ${
+																decisionStatusByApplicationId[application.id] === 'rejected'
+																	? 'bg-rose-600 text-white'
+																	: 'border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+															}`}
+														>
+															Refusé
+														</button>
+													</div>
 												)}
 											</div>
 										</article>

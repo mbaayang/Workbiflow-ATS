@@ -45,7 +45,7 @@ export class Application {
 	prescreenAnswers: PrescreenAnswer[]
 
 	@Column({ type: 'varchar', length: 50, default: 'pending' })
-	status: 'pending' | 'reviewing' | 'accepted' | 'rejected'
+	status: 'pending' | 'reviewing' | 'interview' | 'test' | 'accepted' | 'rejected' | 'offer'
 
 	@CreateDateColumn()
 	createdAt: Date
