@@ -558,6 +558,14 @@ export default function Pipeline() {
 					stageMeta={stageMeta}
 					onMoveCard={moveCardToStage}
 					onOpenDetails={(application) => setSelectedApplication(application)}
+					onOpenInterviewPlanner={(application) => {
+						const redirectJobId = selectedJobId ?? application.jobId
+						if (redirectJobId) {
+							navigate(`/jobs/${redirectJobId}/interviews?candidateId=${application.id}`)
+							return
+						}
+						navigate(`/interviews?candidateId=${application.id}`)
+					}}
 					onSelectDecision={handleDecisionSelection}
 					decisionStatusByApplicationId={decisionStatusByApplicationId}
 					interviewPlannedByApplicationId={interviewPlannedByApplicationId}

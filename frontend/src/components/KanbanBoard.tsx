@@ -14,6 +14,7 @@ interface KanbanBoardProps {
 	stageMeta: Record<string, { total: number; hasMore: boolean; loading: boolean }>
 	onMoveCard: (applicationId: string, toStageId: string) => void
 	onOpenDetails: (application: ApplicationItem) => void
+	onOpenInterviewPlanner: (application: ApplicationItem) => void
 	onSelectDecision: (applicationId: string, decision: 'accepted' | 'rejected') => void
 	decisionStatusByApplicationId: Record<string, 'accepted' | 'rejected' | undefined>
 	interviewPlannedByApplicationId: Record<string, boolean>
@@ -27,6 +28,7 @@ export default function KanbanBoard({
 	stageMeta,
 	onMoveCard,
 	onOpenDetails,
+	onOpenInterviewPlanner,
 	onSelectDecision,
 	decisionStatusByApplicationId,
 	interviewPlannedByApplicationId,
@@ -118,12 +120,18 @@ export default function KanbanBoard({
 
 											<div className="mt-3 space-y-1 text-xs text-slate-600">
 												{stage.id === 'interview' && (
-													<p
+													<button
+														type="button"
+														onClick={(event) => {
+															event.stopPropagation()
+															onOpenInterviewPlanner(application)
+														}}
 														className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
 															interviewPlannedByApplicationId[application.id]
 																? 'bg-emerald-100 text-emerald-700'
 																: 'bg-amber-100 text-amber-700'
 														}`}
+														title="Ouvrir la planification des entretiens"
 													>
 														<span
 															className={`h-1.5 w-1.5 rounded-full ${
@@ -135,7 +143,7 @@ export default function KanbanBoard({
 														{interviewPlannedByApplicationId[application.id]
 															? 'Entretien planifié'
 															: 'Entretien à planifier'}
-													</p>
+													</button>
 												)}
 												<p>Ville: {application.city || '-'}</p>
 												<p>
