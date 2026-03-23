@@ -14,6 +14,16 @@ interface MailOptions {
   isHtml?: boolean;
 }
 
+interface InterviewMailDetails {
+  interviewDate: string;
+  interviewTime: string;
+  interviewDuration: string;
+  interviewer: string;
+  meetingTypeLabel: string;
+  locationOrLink: string;
+  interviewNotes: string;
+}
+
 @Injectable()
 export class MailService {
   private readonly defaultSenderEmail = process.env.SENDGRID_SENDER || '';
@@ -66,12 +76,15 @@ export class MailService {
     return { subject, body };
   }
 
-  advancedToInterview(firstName: string): {
+  advancedToInterview(firstName: string, details: InterviewMailDetails): {
     subject: string;
     body: string;
   } {
     const subject = 'Invitation à un entretien';
-    const body = this.mailTemplateService.getTemplate('advanced-to-interview', { firstName });
+    const body = this.mailTemplateService.getTemplate('advanced-to-interview', {
+      firstName,
+      ...details,
+    });
     return { subject, body };
   }
 

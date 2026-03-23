@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { JobsModule } from './jobs/jobs.module';
 import { ApplicationsModule } from './applications/applications.module';
+import { InterviewsModule } from './interviews/interviews.module';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { ApplicationsModule } from './applications/applications.module';
       serveRoot: '/uploads',
     }),
     JobsModule,
-    ApplicationsModule
+    ApplicationsModule,
+    InterviewsModule
   ],
   controllers: [AppController],
   providers: [AppService],

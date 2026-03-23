@@ -11,20 +11,24 @@ export interface KanbanStage {
 interface KanbanBoardProps {
 	stages: KanbanStage[]
 	groupedApplications: Record<string, ApplicationItem[]>
+	stageMeta: Record<string, { total: number; hasMore: boolean; loading: boolean }>
 	onMoveCard: (applicationId: string, toStageId: string) => void
 	onOpenDetails: (application: ApplicationItem) => void
 	onSelectDecision: (applicationId: string, decision: 'accepted' | 'rejected') => void
 	decisionStatusByApplicationId: Record<string, 'accepted' | 'rejected' | undefined>
+	onLoadMoreStage: (stageId: string) => void
 	activeJobTitle?: string
 }
 
 export default function KanbanBoard({
 	stages,
 	groupedApplications,
+	stageMeta,
 	onMoveCard,
 	onOpenDetails,
 	onSelectDecision,
 	decisionStatusByApplicationId,
+	onLoadMoreStage,
 	activeJobTitle,
 }: KanbanBoardProps) {
 	const getInitials = (firstName: string, lastName: string) => {
@@ -65,6 +69,7 @@ export default function KanbanBoard({
 				<div className="grid min-w-[1320px] grid-cols-6 gap-4">
 					{stages.map((stage) => {
 						const cards = groupedApplications[stage.id] ?? []
+						const meta = stageMeta[stage.id] ?? { total: cards.length, hasMore: false, loading: false }
 
 						return (
 							<section
@@ -84,7 +89,7 @@ export default function KanbanBoard({
 										<span
 											className={`rounded-full px-2 py-1 text-xs font-semibold ${stage.accentClass}`}
 										>
-											{cards.length}
+											{cards.length}/{meta.total}
 										</span>
 									</div>
 								</header>
@@ -177,6 +182,17 @@ export default function KanbanBoard({
 										<div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-400">
 											Aucune candidature
 										</div>
+									)}
+
+									{meta.hasMore && (
+										<button
+											type="button"
+											onClick={() => onLoadMoreStage(stage.id)}
+											disabled={meta.loading}
+											className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+										>
+											{meta.loading ? 'Chargement...' : 'Charger plus'}
+										</button>
 									)}
 								</div>
 							</section>

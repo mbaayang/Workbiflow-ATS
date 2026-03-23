@@ -214,13 +214,22 @@ export default function Jobs() {
 												<span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
 													Début: {job.desiredStartDate}
 												</span>
-												<span className="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700">
+												<Link
+													to={`/jobs/${job.id}/candidates`}
+													className="rounded-full bg-indigo-100 px-2.5 py-1 font-medium text-indigo-700 hover:bg-indigo-200"
+												>
 													{applicationCounts[job.id] ?? 0} candidature(s)
-												</span>
+												</Link>
 											</div>
 										</div>
 
 										<div className="flex flex-wrap gap-2 md:justify-end">
+											<Link
+												to={`/jobs/${job.id}/interviews`}
+												className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-100"
+											>
+												Interviews
+											</Link>
 											<Link
 												to={`/jobs/${job.id}/pipeline`}
 												className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"

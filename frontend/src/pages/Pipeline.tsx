@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import KanbanBoard from '../components/KanbanBoard'
 import ApplicationDetail from '../components/ApplicationDetail'
 import type { KanbanStage } from '../components/KanbanBoard'
@@ -14,6 +14,8 @@ type StageId =
 	| 'test'
 	| 'decision'
 	| 'offer'
+
+const PAGE_SIZE = 40
 
 const pipelineStages: KanbanStage[] = [
 	{
@@ -85,11 +87,52 @@ const stageToStatusMap: Record<PersistedStageId, ApplicationItem['status']> = {
 	offer: 'offer',
 }
 
+const stageToStatusesQuery: Record<StageId, ApplicationItem['status'][]> = {
+	received: ['pending'],
+	screening: ['reviewing'],
+	interview: ['interview'],
+	test: ['test'],
+	decision: ['accepted', 'rejected'],
+	offer: ['offer'],
+}
+
+const createEmptyStageApplications = (): Record<StageId, ApplicationItem[]> => ({
+	received: [],
+	screening: [],
+	interview: [],
+	test: [],
+	decision: [],
+	offer: [],
+})
+
+const createEmptyStageMeta = (): Record<StageId, { total: number; hasMore: boolean; loading: boolean }> => ({
+	received: { total: 0, hasMore: false, loading: false },
+	screening: { total: 0, hasMore: false, loading: false },
+	interview: { total: 0, hasMore: false, loading: false },
+	test: { total: 0, hasMore: false, loading: false },
+	decision: { total: 0, hasMore: false, loading: false },
+	offer: { total: 0, hasMore: false, loading: false },
+})
+
+const stageIds: StageId[] = ['received', 'screening', 'interview', 'test', 'decision', 'offer']
+
+interface PaginatedApplicationsResponse {
+	items: ApplicationItem[]
+	total: number
+	limit: number
+	offset: number
+	hasMore: boolean
+}
+
 export default function Pipeline() {
 	const { jobId: routeJobId = '' } = useParams()
+	const navigate = useNavigate()
 
 	const [jobs, setJobs] = useState<JobItem[]>([])
-	const [applications, setApplications] = useState<ApplicationItem[]>([])
+	const [applicationsByStage, setApplicationsByStage] =
+		useState<Record<StageId, ApplicationItem[]>>(createEmptyStageApplications())
+	const [stageMeta, setStageMeta] =
+		useState<Record<StageId, { total: number; hasMore: boolean; loading: boolean }>>(createEmptyStageMeta())
 	const [stageByApplicationId, setStageByApplicationId] = useState<Record<string, StageId>>({})
 	const [decisionStatusByApplicationId, setDecisionStatusByApplicationId] = useState<
 		Record<string, 'accepted' | 'rejected' | undefined>
@@ -99,44 +142,102 @@ export default function Pipeline() {
 	const [error, setError] = useState('')
 	const [feedback, setFeedback] = useState('')
 
+	const selectedJobId = routeJobId ? Number(routeJobId) : null
+
+	const fetchStagePage = async (
+		stageId: StageId,
+		offset: number,
+		jobId?: number,
+	): Promise<PaginatedApplicationsResponse> => {
+		const statuses = stageToStatusesQuery[stageId]
+		const response = await axios.get('/api/applications', {
+			params: {
+				statuses: statuses.join(','),
+				limit: PAGE_SIZE,
+				offset,
+				...(jobId ? { jobId } : {}),
+			},
+		})
+
+		const payload = response?.data?.data ?? response?.data
+		if (Array.isArray(payload)) {
+			return {
+				items: payload as ApplicationItem[],
+				total: payload.length,
+				limit: PAGE_SIZE,
+				offset,
+				hasMore: false,
+			}
+		}
+
+		return payload as PaginatedApplicationsResponse
+	}
+
+	const hydrateDecisionAndStageMaps = (applications: ApplicationItem[]) => {
+		setStageByApplicationId((prev) => {
+			const next = { ...prev }
+			for (const app of applications) {
+				next[app.id] = statusToStage[app.status] ?? 'received'
+			}
+			return next
+		})
+
+		setDecisionStatusByApplicationId((prev) => {
+			const next = { ...prev }
+			for (const app of applications) {
+				if (app.status === 'accepted' || app.status === 'rejected') {
+					next[app.id] = app.status
+				}
+			}
+			return next
+		})
+	}
+
 	useEffect(() => {
-		const fetchData = async () => {
+		const fetchJobs = async () => {
+			try {
+				const jobsResponse = await axios.get('/api/jobs')
+				const jobsPayload = jobsResponse?.data?.data ?? jobsResponse?.data ?? []
+				setJobs(Array.isArray(jobsPayload) ? (jobsPayload as JobItem[]) : [])
+			} catch {
+				setError('Impossible de charger la liste des offres.')
+			}
+		}
+
+		void fetchJobs()
+	}, [])
+
+	useEffect(() => {
+		const fetchInitialPipeline = async () => {
 			setLoading(true)
 			setError('')
+			setStageByApplicationId({})
+			setDecisionStatusByApplicationId({})
+			setApplicationsByStage(createEmptyStageApplications())
+			setStageMeta(createEmptyStageMeta())
 
 			try {
-				const [jobsResponse, applicationsResponse] = await Promise.all([
-					axios.get('/api/jobs'),
-					axios.get('/api/applications'),
-				])
+				const results = await Promise.all(
+					stageIds.map((stageId) => fetchStagePage(stageId, 0, selectedJobId ?? undefined)),
+				)
 
-				const jobsPayload = jobsResponse?.data?.data ?? jobsResponse?.data ?? []
-				const applicationsPayload = applicationsResponse?.data?.data ?? applicationsResponse?.data ?? []
+				const nextApplications = createEmptyStageApplications()
+				const nextMeta = createEmptyStageMeta()
 
-				const jobsList = Array.isArray(jobsPayload) ? (jobsPayload as JobItem[]) : []
-				const applicationsList = Array.isArray(applicationsPayload)
-					? (applicationsPayload as ApplicationItem[])
-					: []
-
-				setJobs(jobsList)
-				setApplications(applicationsList)
-
-				const initialStageMap = applicationsList.reduce<Record<string, StageId>>((acc, app) => {
-					acc[app.id] = statusToStage[app.status] ?? 'received'
-					return acc
-				}, {})
-
-				const initialDecisionMap = applicationsList.reduce<
-					Record<string, 'accepted' | 'rejected' | undefined>
-				>((acc, app) => {
-					if (app.status === 'accepted' || app.status === 'rejected') {
-						acc[app.id] = app.status
+				for (let i = 0; i < stageIds.length; i += 1) {
+					const stageId = stageIds[i]
+					const page = results[i]
+					nextApplications[stageId] = page.items
+					nextMeta[stageId] = {
+						total: page.total,
+						hasMore: page.hasMore,
+						loading: false,
 					}
-					return acc
-				}, {})
+				}
 
-				setStageByApplicationId(initialStageMap)
-				setDecisionStatusByApplicationId(initialDecisionMap)
+				setApplicationsByStage(nextApplications)
+				setStageMeta(nextMeta)
+				hydrateDecisionAndStageMaps(results.flatMap((page) => page.items))
 			} catch {
 				setError('Impossible de charger le pipeline pour le moment.')
 			} finally {
@@ -144,30 +245,22 @@ export default function Pipeline() {
 			}
 		}
 
-		void fetchData()
-	}, [])
-
-	const selectedJobId = routeJobId ? Number(routeJobId) : null
+		void fetchInitialPipeline()
+	}, [selectedJobId])
 
 	const selectedJob = useMemo(() => {
 		if (!selectedJobId) return null
 		return jobs.find((job) => job.id === selectedJobId) ?? null
 	}, [jobs, selectedJobId])
 
-	const filteredApplications = useMemo(() => {
-		if (!selectedJobId) return applications
-		return applications.filter((application) => application.jobId === selectedJobId)
-	}, [applications, selectedJobId])
-
 	const groupedApplications = useMemo(() => {
-		const buckets: Record<string, ApplicationItem[]> = pipelineStages.reduce((acc, stage) => {
-			acc[stage.id] = []
-			return acc
-		}, {} as Record<string, ApplicationItem[]>)
-
-		for (const application of filteredApplications) {
-			const stageId = stageByApplicationId[application.id] ?? 'received'
-			buckets[stageId].push(application)
+		const buckets: Record<string, ApplicationItem[]> = {
+			received: [...applicationsByStage.received],
+			screening: [...applicationsByStage.screening],
+			interview: [...applicationsByStage.interview],
+			test: [...applicationsByStage.test],
+			decision: [...applicationsByStage.decision],
+			offer: [...applicationsByStage.offer],
 		}
 
 		for (const stage of pipelineStages) {
@@ -179,7 +272,53 @@ export default function Pipeline() {
 		}
 
 		return buckets
-	}, [filteredApplications, stageByApplicationId])
+	}, [applicationsByStage])
+
+	const totalLoadedApplications = useMemo(
+		() => stageIds.reduce((total, stageId) => total + (applicationsByStage[stageId]?.length ?? 0), 0),
+		[applicationsByStage],
+	)
+
+	const loadMoreStage = async (stageId: StageId) => {
+		const currentItems = applicationsByStage[stageId] ?? []
+		setStageMeta((prev) => ({
+			...prev,
+			[stageId]: {
+				...prev[stageId],
+				loading: true,
+			},
+		}))
+
+		try {
+			const page = await fetchStagePage(stageId, currentItems.length, selectedJobId ?? undefined)
+			setApplicationsByStage((prev) => {
+				const existingIds = new Set(prev[stageId].map((item) => item.id))
+				const newItems = page.items.filter((item) => !existingIds.has(item.id))
+				return {
+					...prev,
+					[stageId]: [...prev[stageId], ...newItems],
+				}
+			})
+			setStageMeta((prev) => ({
+				...prev,
+				[stageId]: {
+					total: page.total,
+					hasMore: page.hasMore,
+					loading: false,
+				},
+			}))
+			hydrateDecisionAndStageMaps(page.items)
+		} catch {
+			setStageMeta((prev) => ({
+				...prev,
+				[stageId]: {
+					...prev[stageId],
+					loading: false,
+				},
+			}))
+			setFeedback('Échec du chargement supplémentaire pour cette colonne.')
+		}
+	}
 
 	const moveCardToStage = async (applicationId: string, toStageId: string) => {
 		const currentStageId = stageByApplicationId[applicationId] ?? 'received'
@@ -201,6 +340,27 @@ export default function Pipeline() {
 		}
 
 		if (toStageId === 'decision') {
+			let movedToDecision: ApplicationItem | null = null
+			setApplicationsByStage((prev) => {
+				const sourceItems = prev[currentStageId].filter((item) => {
+					if (item.id === applicationId) {
+						movedToDecision = item
+						return false
+					}
+					return true
+				})
+
+				if (!movedToDecision) {
+					return prev
+				}
+
+				return {
+					...prev,
+					[currentStageId]: sourceItems,
+					decision: [movedToDecision, ...prev.decision],
+				}
+			})
+
 			setStageByApplicationId((prev) => ({
 				...prev,
 				[applicationId]: 'decision',
@@ -215,18 +375,35 @@ export default function Pipeline() {
 			return
 		}
 
+		const sourceApplication = applicationsByStage[currentStageId].find(
+			(application) => application.id === applicationId,
+		)
+
 		setStageByApplicationId((prev) => ({
 			...prev,
 			[applicationId]: toStageId as StageId,
 		}))
 
-		setApplications((prev) =>
-			prev.map((application) =>
-				application.id === applicationId
-					? { ...application, status: statusToPersist }
-					: application,
-			),
-		)
+		let movedApplication: ApplicationItem | null = null
+		setApplicationsByStage((prev) => {
+			const sourceItems = prev[currentStageId].filter((application) => {
+				if (application.id === applicationId) {
+					movedApplication = { ...application, status: statusToPersist }
+					return false
+				}
+				return true
+			})
+
+			if (!movedApplication) {
+				return prev
+			}
+
+			return {
+				...prev,
+				[currentStageId]: sourceItems,
+				[toStageId]: [movedApplication, ...prev[toStageId as StageId]],
+			}
+		})
 
 		try {
 			await axios.patch(`/api/applications/${applicationId}`, { status: statusToPersist })
@@ -236,23 +413,55 @@ export default function Pipeline() {
 				[applicationId]: currentStageId,
 			}))
 
-			const previousStatus =
+			const rollbackStatus =
 				currentStageId === 'decision'
 					? decisionStatusByApplicationId[applicationId] || 'accepted'
 					: stageToStatusMap[currentStageId as PersistedStageId]
-			setApplications((prev) =>
-				prev.map((application) =>
-					application.id === applicationId
-						? { ...application, status: previousStatus }
-						: application,
-				),
-			)
+
+			setApplicationsByStage((prev) => {
+				const targetItems = prev[toStageId as StageId].filter((app) => app.id !== applicationId)
+				const existingInSource = prev[currentStageId].some((app) => app.id === applicationId)
+				const restored = movedApplication
+					? { ...movedApplication, status: rollbackStatus }
+					: null
+
+				return {
+					...prev,
+					[toStageId as StageId]: targetItems,
+					[currentStageId]:
+						restored && !existingInSource
+							? [restored, ...prev[currentStageId]]
+							: prev[currentStageId],
+				}
+			})
 
 			setFeedback('Échec de la mise à jour en base. Le déplacement a été annulé.')
 			return
 		}
 
 		const targetStage = pipelineStages.find((stage) => stage.id === toStageId)
+
+		if (toStageId === 'interview') {
+			setFeedback(
+				`Candidature déplacée vers « ${targetStage?.title} ». Planifie l’entretien pour déclencher l’email d’invitation.`,
+			)
+
+			const shouldPlanNow = window.confirm(
+				'Cette candidature est maintenant à l’étape Entretien. Voulez-vous planifier un entretien maintenant ?',
+			)
+
+			if (shouldPlanNow) {
+				const redirectJobId = selectedJobId ?? sourceApplication?.jobId
+				if (redirectJobId) {
+					navigate(`/jobs/${redirectJobId}/interviews?candidateId=${applicationId}`)
+				} else {
+					navigate(`/interviews?candidateId=${applicationId}`)
+				}
+			}
+
+			return
+		}
+
 		setFeedback(
 			`Candidature déplacée vers « ${targetStage?.title} ». Template email déclenché: ${targetStage?.emailLabel}.`,
 		)
@@ -267,11 +476,12 @@ export default function Pipeline() {
 			[applicationId]: decision,
 		}))
 
-		setApplications((prev) =>
-			prev.map((application) =>
+		setApplicationsByStage((prev) => ({
+			...prev,
+			decision: prev.decision.map((application) =>
 				application.id === applicationId ? { ...application, status: decision } : application,
 			),
-		)
+		}))
 
 		try {
 			await axios.patch(`/api/applications/${applicationId}`, { status: decision })
@@ -305,7 +515,7 @@ export default function Pipeline() {
 							Retour aux offres
 						</Link>
 						<span className="hidden md:inline">•</span>
-						<span>{filteredApplications.length} candidature(s)</span>
+						<span>{totalLoadedApplications} candidature(s) affichée(s)</span>
 					</div>
 				</div>
 
@@ -319,10 +529,12 @@ export default function Pipeline() {
 				<KanbanBoard
 					stages={pipelineStages}
 					groupedApplications={groupedApplications}
+					stageMeta={stageMeta}
 					onMoveCard={moveCardToStage}
 					onOpenDetails={(application) => setSelectedApplication(application)}
 					onSelectDecision={handleDecisionSelection}
 					decisionStatusByApplicationId={decisionStatusByApplicationId}
+					onLoadMoreStage={(stageId) => void loadMoreStage(stageId as StageId)}
 					activeJobTitle={selectedJob?.title}
 				/>
 

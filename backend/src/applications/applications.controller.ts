@@ -50,11 +50,22 @@ export class ApplicationsController {
 		@Query('jobId') jobId?: string,
 		@Query('companySlug') companySlug?: string,
 		@Query('status') status?: string,
+		@Query('statuses') statuses?: string,
+		@Query('limit') limit?: string,
+		@Query('offset') offset?: string,
 	) {
 		return await this.applicationsService.findAll({
 			jobId: jobId ? parseInt(jobId, 10) : undefined,
 			companySlug,
 			status,
+			statuses: statuses
+				? statuses
+						.split(',')
+						.map((value) => value.trim())
+						.filter(Boolean)
+				: undefined,
+			limit: limit ? parseInt(limit, 10) : undefined,
+			offset: offset ? parseInt(offset, 10) : undefined,
 		})
 	}
 

@@ -101,7 +101,14 @@ export class ApplicationsService {
 		return savedApplication
 	}
 
-	async findAll(filters?: { jobId?: number; companySlug?: string; status?: string }) {
+	async findAll(filters?: {
+		jobId?: number
+		companySlug?: string
+		status?: string
+		statuses?: string[]
+		limit?: number
+		offset?: number
+	}) {
 		const query = this.applicationRepository.createQueryBuilder('app')
 
 		if (filters?.jobId) {
@@ -116,7 +123,32 @@ export class ApplicationsService {
 			query.andWhere('app.status = :status', { status: filters.status })
 		}
 
+		if (filters?.statuses && filters.statuses.length > 0) {
+			query.andWhere('app.status IN (:...statuses)', { statuses: filters.statuses })
+		}
+
 		query.orderBy('app.createdAt', 'DESC')
+
+		const hasPagination =
+			typeof filters?.limit === 'number' || typeof filters?.offset === 'number'
+
+		if (hasPagination) {
+			const safeLimit = Math.min(Math.max(filters?.limit ?? 30, 1), 200)
+			const safeOffset = Math.max(filters?.offset ?? 0, 0)
+
+			query.take(safeLimit)
+			query.skip(safeOffset)
+
+			const [items, total] = await query.getManyAndCount()
+
+			return {
+				items,
+				total,
+				limit: safeLimit,
+				offset: safeOffset,
+				hasMore: safeOffset + items.length < total,
+			}
+		}
 
 		return await query.getMany()
 	}
@@ -161,9 +193,6 @@ export class ApplicationsService {
 		switch (application.status) {
 			case 'reviewing':
 				emailData = this.mailService.advancedToScreening(application.firstName)
-				break
-			case 'interview':
-				emailData = this.mailService.advancedToInterview(application.firstName)
 				break
 			case 'test':
 				emailData = this.mailService.advancedToTest(application.firstName)
