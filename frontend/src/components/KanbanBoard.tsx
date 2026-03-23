@@ -16,6 +16,7 @@ interface KanbanBoardProps {
 	onOpenDetails: (application: ApplicationItem) => void
 	onSelectDecision: (applicationId: string, decision: 'accepted' | 'rejected') => void
 	decisionStatusByApplicationId: Record<string, 'accepted' | 'rejected' | undefined>
+	interviewPlannedByApplicationId: Record<string, boolean>
 	onLoadMoreStage: (stageId: string) => void
 	activeJobTitle?: string
 }
@@ -28,6 +29,7 @@ export default function KanbanBoard({
 	onOpenDetails,
 	onSelectDecision,
 	decisionStatusByApplicationId,
+	interviewPlannedByApplicationId,
 	onLoadMoreStage,
 	activeJobTitle,
 }: KanbanBoardProps) {
@@ -115,6 +117,26 @@ export default function KanbanBoard({
 											</div>
 
 											<div className="mt-3 space-y-1 text-xs text-slate-600">
+												{stage.id === 'interview' && (
+													<p
+														className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+															interviewPlannedByApplicationId[application.id]
+																? 'bg-emerald-100 text-emerald-700'
+																: 'bg-amber-100 text-amber-700'
+														}`}
+													>
+														<span
+															className={`h-1.5 w-1.5 rounded-full ${
+																interviewPlannedByApplicationId[application.id]
+																	? 'bg-emerald-500'
+																	: 'bg-amber-500'
+															}`}
+														/>
+														{interviewPlannedByApplicationId[application.id]
+															? 'Entretien planifié'
+															: 'Entretien à planifier'}
+													</p>
+												)}
 												<p>Ville: {application.city || '-'}</p>
 												<p>
 													Déposé le:{' '}
@@ -122,26 +144,28 @@ export default function KanbanBoard({
 														? new Date(application.createdAt).toLocaleDateString('fr-FR')
 														: '-'}
 												</p>
-												{application.cvPath && (
-													<a
-														href={`http://localhost:3000/${application.cvPath}`}
-														target="_blank"
-														rel="noreferrer"
-														className="inline-flex items-center text-indigo-600 hover:underline"
+												<div className="mt-2 flex items-center">
+													{application.cvPath && (
+														<a
+															href={`http://localhost:3000/${application.cvPath}`}
+															target="_blank"
+															rel="noreferrer"
+															className="inline-flex items-center text-indigo-600 hover:underline"
+														>
+															Voir CV
+														</a>
+													)}
+													<button
+														type="button"
+														onClick={(event) => {
+															event.stopPropagation()
+															onOpenDetails(application)
+														}}
+														className="ml-auto inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
 													>
-														Voir CV
-													</a>
-												)}
-												<button
-													type="button"
-													onClick={(event) => {
-														event.stopPropagation()
-														onOpenDetails(application)
-													}}
-													className="inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-												>
-													Voir détail
-												</button>
+														Voir détail
+													</button>
+												</div>
 
 												{stage.id === 'decision' && (
 													<div className="mt-2 flex flex-wrap gap-2">

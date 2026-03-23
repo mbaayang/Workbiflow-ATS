@@ -5,6 +5,7 @@ import KanbanBoard from '../components/KanbanBoard'
 import ApplicationDetail from '../components/ApplicationDetail'
 import type { KanbanStage } from '../components/KanbanBoard'
 import type { ApplicationItem } from '../types/ApplicationType'
+import type { InterviewEvent } from '../types/InterviewType'
 import type { JobItem } from '../types/JobType'
 
 type StageId =
@@ -134,6 +135,8 @@ export default function Pipeline() {
 	const [stageMeta, setStageMeta] =
 		useState<Record<StageId, { total: number; hasMore: boolean; loading: boolean }>>(createEmptyStageMeta())
 	const [stageByApplicationId, setStageByApplicationId] = useState<Record<string, StageId>>({})
+	const [interviewPlannedByApplicationId, setInterviewPlannedByApplicationId] =
+		useState<Record<string, boolean>>({})
 	const [decisionStatusByApplicationId, setDecisionStatusByApplicationId] = useState<
 		Record<string, 'accepted' | 'rejected' | undefined>
 	>({})
@@ -193,6 +196,26 @@ export default function Pipeline() {
 		})
 	}
 
+	const fetchInterviewPlanningStatus = async (jobId?: number): Promise<Record<string, boolean>> => {
+		const response = await axios.get('/api/interviews', {
+			params: {
+				...(jobId ? { jobId } : {}),
+			},
+		})
+
+		const payload = response?.data?.data ?? response?.data
+		const interviews = Array.isArray(payload)
+			? (payload as InterviewEvent[])
+			: ((payload?.items ?? []) as InterviewEvent[])
+
+		return interviews.reduce<Record<string, boolean>>((acc, interview) => {
+			if (interview.applicationId) {
+				acc[interview.applicationId] = true
+			}
+			return acc
+		}, {})
+	}
+
 	useEffect(() => {
 		const fetchJobs = async () => {
 			try {
@@ -212,14 +235,16 @@ export default function Pipeline() {
 			setLoading(true)
 			setError('')
 			setStageByApplicationId({})
+			setInterviewPlannedByApplicationId({})
 			setDecisionStatusByApplicationId({})
 			setApplicationsByStage(createEmptyStageApplications())
 			setStageMeta(createEmptyStageMeta())
 
 			try {
-				const results = await Promise.all(
-					stageIds.map((stageId) => fetchStagePage(stageId, 0, selectedJobId ?? undefined)),
-				)
+				const [results, interviewPlanningMap] = await Promise.all([
+					Promise.all(stageIds.map((stageId) => fetchStagePage(stageId, 0, selectedJobId ?? undefined))),
+					fetchInterviewPlanningStatus(selectedJobId ?? undefined),
+				])
 
 				const nextApplications = createEmptyStageApplications()
 				const nextMeta = createEmptyStageMeta()
@@ -237,6 +262,7 @@ export default function Pipeline() {
 
 				setApplicationsByStage(nextApplications)
 				setStageMeta(nextMeta)
+				setInterviewPlannedByApplicationId(interviewPlanningMap)
 				hydrateDecisionAndStageMaps(results.flatMap((page) => page.items))
 			} catch {
 				setError('Impossible de charger le pipeline pour le moment.')
@@ -534,6 +560,7 @@ export default function Pipeline() {
 					onOpenDetails={(application) => setSelectedApplication(application)}
 					onSelectDecision={handleDecisionSelection}
 					decisionStatusByApplicationId={decisionStatusByApplicationId}
+					interviewPlannedByApplicationId={interviewPlannedByApplicationId}
 					onLoadMoreStage={(stageId) => void loadMoreStage(stageId as StageId)}
 					activeJobTitle={selectedJob?.title}
 				/>
