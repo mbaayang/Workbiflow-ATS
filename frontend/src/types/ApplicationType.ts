@@ -13,6 +13,27 @@ export interface PrescreenAnswer {
 	answer: string
 }
 
+export interface Criteria {
+	score: number
+	max: number
+	details: string
+}
+
+export interface AIScoreBreakdown {
+	keywords: Criteria
+	experience: Criteria
+	education: Criteria
+	prescreen: Criteria
+	completeness: Criteria
+	coherence: Criteria
+}
+
+export interface AIScoreUnavailable {
+	status: 'unavailable'
+	reason?: string
+	at?: string
+}
+
 export interface ApplicationItem {
 	id: string
 	jobId: number
@@ -29,4 +50,7 @@ export interface ApplicationItem {
 	status: ApplicationStatus
 	createdAt?: string
 	updatedAt?: string
+	aiScore?: number | null
+	aiScoreBreakdown?: AIScoreBreakdown | AIScoreUnavailable
+	aiRecommendation?: 'strong_match' | 'good_match' | 'average_match' | 'not_recommended' | null
 }

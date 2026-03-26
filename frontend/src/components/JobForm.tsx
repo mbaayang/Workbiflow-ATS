@@ -113,9 +113,10 @@ export default function JobForm() {
   const watchedQuestions = watch("prescreenQuestions")
 
   const formatText = (command: "bold" | "italic" | "insertUnorderedList") => {
-    document.execCommand(command)
+    editorRef.current?.focus()
+    document.execCommand(command, false)
     const html = editorRef.current?.innerHTML ?? ""
-    setValue("description", html, { shouldValidate: true })
+    setValue("description", html, { shouldValidate: true, shouldDirty: true })
   }
 
   const onEditorInput = () => {
@@ -129,16 +130,24 @@ export default function JobForm() {
 
     const payload = {
       ...values,
-      prescreenQuestions: values.prescreenQuestions.map((q) => ({
-        ...q,
-        options:
+      prescreenQuestions: values.prescreenQuestions.map((q) => {
+        const options =
           q.type === "multiple_choice"
             ? (q.optionsRaw || "")
                 .split("\n")
                 .map((o) => o.trim())
                 .filter(Boolean)
-            : undefined,
-      })),
+            : undefined
+
+        return {
+          label: q.label,
+          type: q.type,
+          required: q.required,
+          ...(typeof q.min === "number" ? { min: q.min } : {}),
+          ...(typeof q.max === "number" ? { max: q.max } : {}),
+          ...(options ? { options } : {}),
+        }
+      }),
     }
 
     try {
@@ -301,7 +310,7 @@ export default function JobForm() {
             ref={editorRef}
             contentEditable
             onInput={onEditorInput}
-            className="min-h-40 w-full rounded-lg border border-slate-300 p-3 outline-none ring-indigo-500 focus:ring"
+            className="min-h-40 w-full rounded-lg border border-slate-300 p-3 outline-none ring-indigo-500 focus:ring [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1"
             suppressContentEditableWarning
           />
 
@@ -551,6 +560,15 @@ export default function JobForm() {
           </select>
         </section>
 
+        {apiMessage && (
+          <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">
+            {apiMessage}
+          </p>
+        )}
+        {apiError && (
+          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{apiError}</p>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-end gap-3">
           <button
@@ -561,15 +579,6 @@ export default function JobForm() {
             {isSubmitting ? "Envoi..." : "Enregistrer l’offre"}
           </button>
         </div>
-
-        {apiMessage && (
-          <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">
-            {apiMessage}
-          </p>
-        )}
-        {apiError && (
-          <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{apiError}</p>
-        )}
       </form>
     </div>
   )

@@ -262,9 +262,37 @@ export default function Application() {
             {(job.contractType ?? "-").toUpperCase()}
           </p>
           <div
-            className="prose prose-sm mt-4 max-w-none rounded-xl bg-slate-50 p-4 text-slate-700"
+            className="prose prose-sm mt-4 max-w-none rounded-xl bg-slate-50 p-4 text-slate-700 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1"
             dangerouslySetInnerHTML={{ __html: job.description || "" }}
           />
+
+          <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h2 className="mb-2 text-base font-semibold text-slate-800">Critères du poste</h2>
+            <div className="space-y-2 text-sm text-slate-700">
+              <p>
+                <span className="font-medium text-slate-900">Niveau d’études:</span>{" "}
+                {job.criteria?.educationLevel || "-"}
+              </p>
+              <p>
+                <span className="font-medium text-slate-900">Années d’expérience minimum:</span>{" "}
+                {job.criteria?.experienceYears ?? "-"}
+              </p>
+              <p>
+                <span className="font-medium text-slate-900">Compétences:</span>{" "}
+                {job.criteria?.skills && job.criteria.skills.length > 0
+                  ? job.criteria.skills.map((skill) => skill.name).join(", ")
+                  : "-"}
+              </p>
+              <p>
+                <span className="font-medium text-slate-900">Langues:</span>{" "}
+                {job.criteria?.languages && job.criteria.languages.length > 0
+                  ? job.criteria.languages
+                      .map((language) => `${language.name} (${language.level})`)
+                      .join(", ")
+                  : "-"}
+              </p>
+            </div>
+          </section>
         </section>
 
         <form

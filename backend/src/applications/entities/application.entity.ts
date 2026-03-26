@@ -47,6 +47,15 @@ export class Application {
 	@Column({ type: 'varchar', length: 50, default: 'pending' })
 	status: 'pending' | 'reviewing' | 'interview' | 'test' | 'accepted' | 'rejected' | 'offer'
 
+	@Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+	aiScore: number | null
+
+	@Column({ type: 'jsonb', nullable: true })
+	aiScoreBreakdown: any
+
+	@Column({ type: 'varchar', length: 50, nullable: true })
+	aiRecommendation: 'strong_match' | 'good_match' | 'average_match' | 'not_recommended' | null
+
 	@CreateDateColumn()
 	createdAt: Date
 

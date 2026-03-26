@@ -8,7 +8,14 @@ import { MailService } from '../@common/mail/mail.service'
 import { Application } from './entities/application.entity'
 import { CreateApplicationDto } from './dto/create-application.dto'
 import { UpdateApplicationDto } from './dto/update-application.dto'
+import { Job } from '../jobs/entities/job.entity'
 
+interface AiScoringApiResponse {
+	totalScore: number
+	recommendation: 'strong_match' | 'good_match' | 'average_match' | 'not_recommended'
+	breakdown: Record<string, unknown>
+	debug?: Record<string, unknown>
+}
 @Injectable()
 export class ApplicationsService {
 	private readonly logger = new Logger(ApplicationsService.name)
@@ -17,6 +24,8 @@ export class ApplicationsService {
 	constructor(
 		@InjectRepository(Application)
 		private readonly applicationRepository: Repository<Application>,
+		@InjectRepository(Job)
+		private readonly jobRepository: Repository<Job>,
 		private readonly uploadService: UploadService,
 		private readonly mailService: MailService,
 	) {}
@@ -33,6 +42,40 @@ export class ApplicationsService {
 
 	private buildRelativeUploadPath(subfolder: 'cv' | 'cover-letters', filename: string) {
 		return path.join('uploads', 'applications', subfolder, filename).replace(/\\/g, '/')
+	}
+
+	private async requestExternalAiScoring(payload: Record<string, unknown>): Promise<AiScoringApiResponse> {
+		const aiScoringUrl = process.env.AI_SCORING_URL || 'http://127.0.0.1:8001/score'
+
+		const response = await fetch(aiScoringUrl, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify(payload),
+		})
+
+		if (!response.ok) {
+			const responseBody = await response.text()
+			throw new Error(`AI scoring HTTP ${response.status}: ${responseBody}`)
+		}
+
+		return (await response.json()) as AiScoringApiResponse
+	}
+
+	private async markAiScoringUnavailable(
+		application: Application,
+		reason: string,
+	): Promise<void> {
+		application.aiScore = null
+		application.aiRecommendation = null
+		application.aiScoreBreakdown = {
+			status: 'unavailable',
+			reason,
+			at: new Date().toISOString(),
+		}
+
+		await this.applicationRepository.save(application)
 	}
 
 	async create(createApplicationDto: CreateApplicationDto) {
@@ -81,6 +124,20 @@ export class ApplicationsService {
 
 		const application = this.applicationRepository.create(applicationData)
 		const savedApplication = await this.applicationRepository.save(application)
+
+		try {
+			await this.scoreApplicationWithAI(savedApplication, createApplicationDto.jobId)
+		} catch (error) {
+			await this.markAiScoringUnavailable(
+				savedApplication,
+				error instanceof Error ? error.message : 'unknown error',
+			)
+			this.logger.warn(
+				`Scoring IA pour candidature ${savedApplication.id} échoué: ${
+					error instanceof Error ? error.message : 'unknown error'
+				}`,
+			)
+		}
 
 		try {
 			const { subject, body } = this.mailService.applicationSubmitted(savedApplication.firstName)
@@ -185,6 +242,49 @@ export class ApplicationsService {
 		}
 
 		return updatedApplication
+	}
+
+	private async scoreApplicationWithAI(
+		application: Application,
+		jobId: number,
+	): Promise<void> {
+		const job = await this.jobRepository.findOne({ where: { id: jobId } })
+		if (!job) {
+			this.logger.warn(`Job ${jobId} introuvable pour scoring IA candidature ${application.id}`)
+			return
+		}
+
+		const cvAbsolutePath = application.cvPath ? path.join(this.publicDir, application.cvPath) : null
+
+		const result = await this.requestExternalAiScoring({
+			candidate: {
+				firstName: application.firstName,
+				lastName: application.lastName,
+				email: application.email,
+				consentAccepted: application.consentAccepted,
+				cvPath: application.cvPath,
+				coverLetterPath: application.coverLetterPath,
+				prescreenAnswers: application.prescreenAnswers ?? [],
+				cvFileAbsolutePath: cvAbsolutePath,
+			},
+			job: {
+				title: job.title,
+				description: job.description,
+				requiredExperienceYears: job.criteria?.experienceYears,
+				requiredEducationLevel: job.criteria?.educationLevel,
+				requiredSkills: job.criteria?.skills?.map((s) => s.name) ?? [],
+				prescreenQuestions: job.prescreenQuestions ?? [],
+			},
+		})
+
+		application.aiScore = result.totalScore
+		application.aiScoreBreakdown = {
+			...result.breakdown,
+			...(result.debug ? { _debug: result.debug } : {}),
+		}
+		application.aiRecommendation = result.recommendation
+
+		await this.applicationRepository.save(application)
 	}
 
 	private async sendStatusTransitionEmail(application: Application) {

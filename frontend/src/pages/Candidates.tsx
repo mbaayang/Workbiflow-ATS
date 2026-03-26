@@ -99,6 +99,13 @@ export default function Candidates() {
 	const hasPrevious = offset > 0
 	const hasNext = offset + PAGE_SIZE < total
 
+	const getScoreBadgeClass = (score: number) => {
+		if (score >= 80) return 'bg-emerald-100 text-emerald-700'
+		if (score >= 65) return 'bg-blue-100 text-blue-700'
+		if (score >= 50) return 'bg-amber-100 text-amber-700'
+		return 'bg-red-100 text-red-700'
+	}
+
 	return (
 		<main className="min-h-screen bg-slate-50 px-4 py-8 md:px-8">
 			<div className="mx-auto w-full max-w-6xl space-y-5">
@@ -183,6 +190,27 @@ export default function Candidates() {
 											</p>
 										</div>
 										<div className="flex items-center gap-2">
+											{application.aiScore !== null && application.aiScore !== undefined && (
+												<span
+													className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getScoreBadgeClass(
+														application.aiScore,
+													)}`}
+													title="Score IA total"
+												>
+													{Math.round(application.aiScore)}/100
+												</span>
+											)}
+											{(application.aiScore === null || application.aiScore === undefined) &&
+												application.aiScoreBreakdown &&
+												'status' in application.aiScoreBreakdown &&
+												application.aiScoreBreakdown.status === 'unavailable' && (
+													<span
+														className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700"
+														title={application.aiScoreBreakdown.reason || 'Service IA indisponible'}
+													>
+														IA indisponible
+													</span>
+												)}
 											<span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700">
 												{application.status}
 											</span>

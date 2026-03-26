@@ -296,7 +296,7 @@ export default function Jobs() {
 											<div className="md:col-span-2">
 												<p className="mb-1 font-medium text-slate-900">Description:</p>
 												<div
-													className="prose prose-sm max-w-none rounded-lg bg-white p-3"
+													className="prose prose-sm max-w-none rounded-lg bg-white p-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-1"
 													dangerouslySetInnerHTML={{ __html: job.description || '-' }}
 												/>
 											</div>

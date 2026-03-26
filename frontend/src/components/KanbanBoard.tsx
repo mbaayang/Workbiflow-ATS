@@ -145,6 +145,33 @@ export default function KanbanBoard({
 															: 'Entretien à planifier'}
 													</button>
 												)}
+												{application.aiScore !== null && application.aiScore !== undefined && (
+													<div
+														className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+															application.aiScore >= 80
+																? 'bg-emerald-100 text-emerald-700'
+																: application.aiScore >= 65
+																	? 'bg-blue-100 text-blue-700'
+																	: application.aiScore >= 50
+																		? 'bg-amber-100 text-amber-700'
+																		: 'bg-red-100 text-red-700'
+														}`}
+														title="Score IA"
+													>
+														<span className="font-semibold">{Math.round(application.aiScore)}/100</span>
+													</div>
+												)}
+												{(application.aiScore === null || application.aiScore === undefined) &&
+													application.aiScoreBreakdown &&
+													'status' in application.aiScoreBreakdown &&
+													application.aiScoreBreakdown.status === 'unavailable' && (
+														<div
+															className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+															title={application.aiScoreBreakdown.reason || 'Service IA indisponible'}
+														>
+															IA indisponible
+														</div>
+													)}
 												<p>Ville: {application.city || '-'}</p>
 												<p>
 													Déposé le:{' '}
